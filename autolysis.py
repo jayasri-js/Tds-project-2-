@@ -11,63 +11,62 @@ AIPROXY_TOKEN = "eyJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6IjIzZHMzMDAwMDY2QGRzLnN0dWR5Lm
 # Define the correct API URL
 API_URL = "https://aiproxy.sanand.workers.dev/openai/v1/chat/completions"
 
-def load_and_analyze_dataset(dataset_path):
+def load_dataset(dataset_path):
+    """Attempt to load the dataset with multiple encodings."""
     encodings = ['utf-8', 'utf-16', 'ISO-8859-1']
-    df = None
-
-    output_dir = "analysis_output"
-    os.makedirs(output_dir, exist_ok=True)
-
     for encoding in encodings:
         try:
             df = pd.read_csv(dataset_path, encoding=encoding)
             print(f"Dataset loaded successfully with {encoding} encoding!")
-            break
+            return df
         except UnicodeDecodeError:
             print(f"Error with {encoding} encoding. Trying next encoding...")
         except Exception as e:
             print(f"Error loading dataset with {encoding} encoding: {e}")
+    print("Failed to load the dataset with all attempted encodings.")
+    return None
 
-    if df is None:
-        print("Failed to load the dataset with all attempted encodings.")
-        return
-
+def generate_analysis(df, output_dir):
+    """Perform analysis and generate visualizations."""
     summary = df.describe()
     missing_values = df.isnull().sum()
     skewness = df.select_dtypes(include=['number']).skew()
     kurtosis = df.select_dtypes(include=['number']).kurtosis()
 
     # Heatmap of missing values
+    heatmap_path = os.path.join(output_dir, "missing_values_heatmap.png")
     plt.figure(figsize=(10, 6))
     sns.heatmap(df.isnull(), cbar=False, cmap='viridis')
     plt.title("Missing Values Heatmap")
-    heatmap_path = os.path.join(output_dir, "missing_values_heatmap.png")
     plt.savefig(heatmap_path)
     plt.close()
 
     # Histograms
     numeric_columns = df.select_dtypes(include=['number']).columns
     histogram_paths = []
-    if len(numeric_columns) > 0:
-        for column in numeric_columns:
-            plt.figure(figsize=(10, 6))
-            sns.histplot(df[column], kde=True, bins=30)
-            plt.title(f'{column} Distribution')
-            plt.xlabel(column)
-            plt.ylabel('Frequency')
-            histogram_path = os.path.join(output_dir, f"{column}_distribution.png")
-            plt.savefig(histogram_path)
-            plt.close()
-            histogram_paths.append(histogram_path)
+    for column in numeric_columns:
+        plt.figure(figsize=(10, 6))
+        sns.histplot(df[column], kde=True, bins=30)
+        plt.title(f'{column} Distribution')
+        plt.xlabel(column)
+        plt.ylabel('Frequency')
+        histogram_path = os.path.join(output_dir, f"{column}_distribution.png")
+        plt.savefig(histogram_path)
+        plt.close()
+        histogram_paths.append(histogram_path)
 
     # Correlation matrix
-    correlation_matrix = df[numeric_columns].corr()
-    plt.figure(figsize=(10, 8))
-    sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
-    plt.title("Correlation Matrix")
     correlation_matrix_path = os.path.join(output_dir, "correlation_matrix.png")
-    plt.savefig(correlation_matrix_path)
-    plt.close()
+    if len(numeric_columns) > 1:
+        correlation_matrix = df[numeric_columns].corr()
+        plt.figure(figsize=(10, 8))
+        sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
+        plt.title("Correlation Matrix")
+        plt.savefig(correlation_matrix_path)
+        plt.close()
+    else:
+        correlation_matrix = None
+        correlation_matrix_path = None
 
     # Outlier detection
     Q1 = df[numeric_columns].quantile(0.25)
@@ -75,34 +74,36 @@ def load_and_analyze_dataset(dataset_path):
     IQR = Q3 - Q1
     outliers = ((df[numeric_columns] < (Q1 - 1.5 * IQR)) | (df[numeric_columns] > (Q3 + 1.5 * IQR))).sum()
 
-    # Send to LLM and get insights
-    llm_response = send_to_llm(df, numeric_columns, missing_values, skewness, kurtosis, correlation_matrix, outliers)
+    return {
+        "summary": summary,
+        "missing_values": missing_values,
+        "skewness": skewness,
+        "kurtosis": kurtosis,
+        "correlation_matrix": correlation_matrix,
+        "correlation_matrix_path": correlation_matrix_path,
+        "histogram_paths": histogram_paths,
+        "heatmap_path": heatmap_path,
+        "outliers": outliers
+    }
 
-    # Create README file
-    create_readme(output_dir, missing_values, skewness, kurtosis, correlation_matrix_path, histogram_paths, llm_response)
-
-def send_to_llm(df, numeric_columns, missing_values, skewness, kurtosis, correlation_matrix, outliers):
+def send_to_llm(analysis_data):
+    """Send analysis data to the LLM for insights."""
     try:
         prompt = f"""
-        I have analyzed a dataset with the following characteristics:
+        Dataset Analysis Report:
+        - Missing Values:\n{analysis_data['missing_values']}
+        - Skewness:\n{analysis_data['skewness']}
+        - Kurtosis:\n{analysis_data['kurtosis']}
+        - Outliers (IQR Method):\n{analysis_data['outliers']}
+        {"- Correlation Matrix:\n" + analysis_data['correlation_matrix'].to_string() if analysis_data['correlation_matrix'] is not None else ""}
         
-        **Missing Values:** {missing_values}
-        **Skewness in Numeric Features:** {skewness}
-        **Kurtosis in Numeric Features:** {kurtosis}
-        **Correlation Matrix:** {correlation_matrix.to_string()}
-        **Outliers (IQR Method):** {outliers}
-        
-        Please answer the following:
-        1. **The data you received:** Briefly describe the dataset.
-        2. **The analysis you carried out:** Summarize the key steps.
-        3. **The insights you discovered:** Highlight the main findings.
-        4. **The implications of your findings:** What actions should be taken based on the insights?
+        Please summarize the findings and suggest actionable insights.
         """
 
         data = {
             "model": "gpt-4o-mini",
             "messages": [
-                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "system", "content": "You are a data analyst."},
                 {"role": "user", "content": prompt}
             ],
             "max_tokens": 500
@@ -122,36 +123,39 @@ def send_to_llm(df, numeric_columns, missing_values, skewness, kurtosis, correla
     except Exception as e:
         return f"Error sending data to LLM: {e}"
 
-def create_readme(output_dir, missing_values, skewness, kurtosis, correlation_matrix_path, histogram_paths, llm_response):
+def create_readme(output_dir, analysis_data, llm_response):
+    """Generate a README file summarizing the analysis."""
     readme_path = os.path.join(output_dir, "README.md")
     with open(readme_path, "w") as f:
         f.write("# Dataset Analysis Report\n\n")
+        f.write("## Summary Statistics\n")
+        f.write(analysis_data['summary'].to_string() + "\n\n")
         f.write("## Missing Values\n")
-        f.write(missing_values.to_string() + "\n\n")
-        f.write("## Skewness of Numeric Columns\n")
-        f.write(skewness.to_string() + "\n\n")
-        f.write("## Kurtosis of Numeric Columns\n")
-        f.write(kurtosis.to_string() + "\n\n")
+        f.write(analysis_data['missing_values'].to_string() + "\n\n")
+        f.write("## Skewness\n")
+        f.write(analysis_data['skewness'].to_string() + "\n\n")
+        f.write("## Kurtosis\n")
+        f.write(analysis_data['kurtosis'].to_string() + "\n\n")
+        if analysis_data['correlation_matrix_path']:
+            f.write(f"## [Correlation Matrix]({os.path.basename(analysis_data['correlation_matrix_path'])})\n\n")
         f.write("## Visualizations\n")
-        f.write(f"- [Missing Values Heatmap]({os.path.basename(correlation_matrix_path)})\n")
-        for histogram_path in histogram_paths:
-            f.write(f"- [{os.path.basename(histogram_path)}]({os.path.basename(histogram_path)})\n\n")
-        f.write("## LLM-Generated Insights\n")
-        f.write(llm_response + "\n")
+        f.write(f"- [Missing Values Heatmap]({os.path.basename(analysis_data['heatmap_path'])})\n")
+        for histogram_path in analysis_data['histogram_paths']:
+            f.write(f"- [{os.path.basename(histogram_path)}]({os.path.basename(histogram_path)})\n")
+        f.write("\n## LLM-Generated Insights\n")
+        f.write(llm_response)
     print(f"README file created at {readme_path}")
 
 def main():
     dataset_path = input("Enter the path to your CSV dataset: ")
-    load_and_analyze_dataset(dataset_path)
+    output_dir = "analysis_output"
+    os.makedirs(output_dir, exist_ok=True)
+
+    df = load_dataset(dataset_path)
+    if df is not None:
+        analysis_data = generate_analysis(df, output_dir)
+        llm_response = send_to_llm(analysis_data)
+        create_readme(output_dir, analysis_data, llm_response)
 
 if __name__ == "__main__":
     main()
-
-
-        
-
-      
-        
-        
-       
-       
