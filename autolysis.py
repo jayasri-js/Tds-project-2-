@@ -1,8 +1,6 @@
 import os
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
-import numpy as np
 
 def load_and_analyze_dataset(dataset_path):
     encodings = ['utf-8', 'utf-16', 'ISO-8859-1']
@@ -32,36 +30,34 @@ def load_and_analyze_dataset(dataset_path):
     kurtosis = df.select_dtypes(include=['number']).kurtosis()
 
     # Heatmap of missing values
-    plt.figure(figsize=(10, 6))
-    sns.heatmap(df.isnull(), cbar=False, cmap='viridis')
-    plt.title("Missing Values Heatmap")
+    sns.set(style="whitegrid")
     heatmap_path = os.path.join(output_dir, "missing_values_heatmap.png")
-    plt.savefig(heatmap_path)
-    plt.close()
+    sns.heatmap(df.isnull(), cbar=False, cmap='viridis')
+    sns.plt.title("Missing Values Heatmap")
+    sns.plt.savefig(heatmap_path)
+    sns.plt.close()
 
     # Histograms for numeric columns
     numeric_columns = df.select_dtypes(include=['number']).columns
     histogram_paths = []
     if len(numeric_columns) > 0:
         for column in numeric_columns:
-            plt.figure(figsize=(10, 6))
-            sns.histplot(df[column], kde=True, bins=30)
-            plt.title(f'{column} Distribution')
-            plt.xlabel(column)
-            plt.ylabel('Frequency')
             histogram_path = os.path.join(output_dir, f"{column}_distribution.png")
-            plt.savefig(histogram_path)
-            plt.close()
+            sns.histplot(df[column], kde=True, bins=30)
+            sns.plt.title(f'{column} Distribution')
+            sns.plt.xlabel(column)
+            sns.plt.ylabel('Frequency')
+            sns.plt.savefig(histogram_path)
+            sns.plt.close()
             histogram_paths.append(histogram_path)
 
     # Correlation matrix
     correlation_matrix = df[numeric_columns].corr()
-    plt.figure(figsize=(10, 8))
-    sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
-    plt.title("Correlation Matrix")
     correlation_matrix_path = os.path.join(output_dir, "correlation_matrix.png")
-    plt.savefig(correlation_matrix_path)
-    plt.close()
+    sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
+    sns.plt.title("Correlation Matrix")
+    sns.plt.savefig(correlation_matrix_path)
+    sns.plt.close()
 
     # Outlier detection
     Q1 = df[numeric_columns].quantile(0.25)
