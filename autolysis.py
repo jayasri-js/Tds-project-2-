@@ -4,8 +4,7 @@
 #   "matplotlib",
 #   "seaborn",
 #   "pandas",
-#   "numpy",
-#   "sys"
+#   "numpy"
 # ]
 # ///
 
