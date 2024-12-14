@@ -4,7 +4,8 @@
 #   "matplotlib",
 #   "seaborn",
 #   "pandas",
-#   "numpy"
+#   "numpy",
+#   "sys"
 # ]
 # ///
 
@@ -13,6 +14,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
+import sys
 
 def load_and_analyze_dataset(dataset_path):
     encodings = ['utf-8', 'utf-16', 'ISO-8859-1']
@@ -134,7 +136,12 @@ def create_readme(output_dir, missing_values, skewness, kurtosis, correlation_ma
     print(f"README file created at {readme_path}")
 
 def main():
-    dataset_path = input("Enter the path to your CSV dataset: ")
+    # Get dataset path from command line argument
+    if len(sys.argv) != 2:
+        print("Usage: python autolysis.py <path_to_csv_dataset>")
+        sys.exit(1)
+
+    dataset_path = sys.argv[1]
     load_and_analyze_dataset(dataset_path)
 
 if __name__ == "__main__":
