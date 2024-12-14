@@ -1,6 +1,12 @@
-pip install matplotlib
-pip install seaborn
-
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "matplotlib",
+#   "seaborn",
+#   "pandas",
+#   "numpy"
+# ]
+# ///
 
 import os
 import pandas as pd
