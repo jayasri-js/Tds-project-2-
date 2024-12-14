@@ -7,6 +7,9 @@
 #   "numpy"
 # ]
 # ///
+import matplotlib
+matplotlib.use('Agg')  # Set non-GUI backend
+
 
 import os
 import pandas as pd
