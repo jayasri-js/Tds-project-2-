@@ -9,8 +9,16 @@
 # ]
 # ///
 
-
-
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "matplotlib",
+#   "seaborn",
+#   "pandas",
+#   "numpy",
+#   "requests"
+# ]
+# ///
 
 import os
 import argparse
@@ -102,77 +110,58 @@ def load_and_analyze_dataset(dataset_path):
     outliers = ((df[numeric_columns] < (Q1 - 1.5 * IQR)) | (df[numeric_columns] > (Q3 + 1.5 * IQR))).sum()
 
     # Send analysis data to LLM for insights
-   
-    def send_to_llm(df, numeric_columns, missing_values, skewness, kurtosis, correlation_matrix, outliers):
-        """
-        This function sends data to GPT-4o-mini to generate precise and actionable insights based on the analysis.
-        """
+    llm_response = send_to_llm(df, numeric_columns, missing_values, skewness, kurtosis, correlation_matrix, outliers)
+
+    # Create a README file with analysis summary and LLM response
+    create_readme(output_dir, missing_values, skewness, kurtosis, correlation_matrix_path, histogram_paths, llm_response)
+
+def send_to_llm(df, numeric_columns, missing_values, skewness, kurtosis, correlation_matrix, outliers):
+    """
+    This function sends data to a language model (LLM) to generate insights based on the analysis.
+    """
     try:
-        # Create a structured prompt with improved clarity and specificity
+        # Create a structured prompt to send to the LLM
         prompt = f"""
-        You are a data analysis assistant. Here's the summary of the dataset analysis:
+        I have analyzed a dataset with the following characteristics:
         
-        1. **Overview**:
-            - Total rows: {len(df)}
-            - Total columns: {len(df.columns)}
-            - Numeric columns analyzed: {len(numeric_columns)}
+        **Missing Values:** {missing_values}
+        **Skewness in Numeric Features:** {skewness}
+        **Kurtosis in Numeric Features:** {kurtosis}
+        **Correlation Matrix:** {correlation_matrix.to_string()}
+        **Outliers (IQR Method):** {outliers}
         
-        2. **Missing Values**:
-        {missing_values.to_string()}
-        
-        3. **Numeric Feature Analysis**:
-            - **Skewness**:
-            {skewness.to_string()}
-            - **Kurtosis**:
-            {kurtosis.to_string()}
-        
-        4. **Correlation Matrix**:
-        ```
-        {correlation_matrix.to_string()}
-        ```
-        
-        5. **Outliers Detected**:
-        ```
-        {outliers.to_string()}
-        ```
-
-        Using this analysis, please provide:
-        - A concise description of the dataset's structure and quality.
-        - Patterns or trends observed in the numeric features.
-        - Key insights or relationships derived from the correlation matrix.
-        - Suggestions for handling missing values and outliers.
-        - Actions or strategies for improving data quality and preparing it for further analysis.
-        - Any additional hypotheses or observations based on the data summary.
+        Please answer the following:
+        1. **The data you received:** Briefly describe the dataset.
+        2. **The analysis you carried out:** Summarize the key steps.
+        3. **The insights you discovered:** Highlight the main findings.
+        4. **The implications of your findings:** What actions should be taken based on the insights?
         """
 
-        # Send the prompt to GPT-4o-mini
+        # Send the prompt to the API
         data = {
-            "model": "gpt-4o-mini",  # Use the mini version identifier
+            "model": "gpt-4",  # Model to use (make sure it's valid)
             "messages": [
-                {"role": "system", "content": "You are a highly accurate and systematic data analysis assistant."},
+                {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": prompt}
             ],
-            "max_tokens": 500,  # Limit tokens to focus on concise outputs
-            "temperature": 0.5,  # Lower temperature for consistent and fact-based responses
-            "top_p": 1.0,       # Ensure deterministic responses
+            "max_tokens": 500
         }
 
         headers = {
-            "Authorization": f"Bearer {AIPROXY_TOKEN}",  # Ensure the correct token is used
+            "Authorization": f"Bearer {AIPROXY_TOKEN}",
             "Content-Type": "application/json"
         }
 
-        # Make the API request
+        # Make API request
         response = requests.post(API_URL, json=data, headers=headers)
 
-        # Handle API response
+        # Check for successful response
         if response.status_code == 200:
             return response.json()['choices'][0]['message']['content'].strip()
         else:
             return f"Error: {response.status_code} - {response.text}"
     except Exception as e:
         return f"Error sending data to LLM: {e}"
-
 
 def create_readme(output_dir, missing_values, skewness, kurtosis, correlation_matrix_path, histogram_paths, llm_response):
     """
@@ -227,4 +216,5 @@ def main():
 if __name__ == "__main__":
     main()
 
-     
+
+
