@@ -9,6 +9,18 @@
 # ]
 # ///
 
+
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "matplotlib",
+#   "seaborn",
+#   "pandas",
+#   "numpy",
+#   "requests"
+# ]
+# ///
+
 import os
 import argparse
 import requests
@@ -182,19 +194,27 @@ def main():
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Analyze a dataset from a CSV file.")
     parser.add_argument(
-        "--dataset", type=str, default=None,
+        "dataset", nargs="?", type=str,  # Allow positional dataset path
         help="Path to the input CSV dataset. If not provided, the DATASET_PATH environment variable will be used."
+    )
+    parser.add_argument(
+        "--dataset", type=str, default=None,  # Allow optional dataset argument
+        help="Path to the input CSV dataset. Overrides positional argument or environment variable."
     )
     args = parser.parse_args()
 
     # Determine dataset path
     dataset_path = args.dataset or os.getenv("DATASET_PATH")
     if not dataset_path:
-        raise ValueError("No dataset path provided. Use --dataset argument or set DATASET_PATH environment variable.")
+        raise ValueError(
+            "No dataset path provided. Provide a dataset path as a positional argument, "
+            "use the --dataset argument, or set the DATASET_PATH environment variable."
+        )
 
     # Call the analysis function with the resolved dataset path
     load_and_analyze_dataset(dataset_path)
 
-
 if __name__ == "__main__":
     main()
+
+     
