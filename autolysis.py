@@ -9,16 +9,7 @@
 # ]
 # ///
 
-# /// script
-# requires-python = ">=3.11"
-# dependencies = [
-#   "matplotlib",
-#   "seaborn",
-#   "pandas",
-#   "numpy",
-#   "requests"
-# ]
-# ///
+
 
 import os
 import argparse
