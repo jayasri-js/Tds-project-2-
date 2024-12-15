@@ -8,31 +8,39 @@
 #   "requests"
 # ]
 # ///
-import matplotlib
-matplotlib.use('Agg')  # Set non-GUI backend
 
-
-
-import os
+    
+ import os
 import requests
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# Read API token from environment variable
+# Set non-GUI backend for matplotlib (useful for running scripts in non-interactive environments)
+import matplotlib
+matplotlib.use('Agg')
+
+# Read API token from environment variable (required for LLM communication)
 AIPROXY_TOKEN = os.getenv("AIPROXY_TOKEN")
 if not AIPROXY_TOKEN:
     raise ValueError("AIPROXY_TOKEN environment variable is not set.")
 
 API_URL = "https://aiproxy.sanand.workers.dev/openai/v1/chat/completions"
 
+# Load dataset and perform data analysis
 def load_and_analyze_dataset(dataset_path):
-    encodings = ['utf-8', 'utf-16', 'ISO-8859-1']
-    df = None
+    """
+    This function loads a dataset, performs basic analysis like detecting missing values,
+    skewness, kurtosis, and generates visualizations.
+    """
+    encodings = ['utf-8', 'utf-16', 'ISO-8859-1']  # Different encodings to try while loading dataset
+    df = None  # Initialize DataFrame
 
+    # Directory to save output files (like plots)
     output_dir = "analysis_output"
     os.makedirs(output_dir, exist_ok=True)
 
+    # Try loading the dataset with different encodings until it succeeds
     for encoding in encodings:
         try:
             df = pd.read_csv(dataset_path, encoding=encoding)
@@ -45,14 +53,15 @@ def load_and_analyze_dataset(dataset_path):
 
     if df is None:
         print("Failed to load the dataset with all attempted encodings.")
-        return
+        return  # Exit if dataset is not loaded
 
-    summary = df.describe()
-    missing_values = df.isnull().sum()
-    skewness = df.select_dtypes(include=['number']).skew()
-    kurtosis = df.select_dtypes(include=['number']).kurtosis()
+    # Perform basic data analysis
+    summary = df.describe()  # Get summary statistics for numerical columns
+    missing_values = df.isnull().sum()  # Count missing values in each column
+    skewness = df.select_dtypes(include=['number']).skew()  # Skewness of numerical columns
+    kurtosis = df.select_dtypes(include=['number']).kurtosis()  # Kurtosis of numerical columns
 
-    # Heatmap of missing values
+    # Visualize missing values using a heatmap
     plt.figure(figsize=(10, 6))
     sns.heatmap(df.isnull(), cbar=False, cmap='viridis')
     plt.title("Missing Values Heatmap")
@@ -60,22 +69,21 @@ def load_and_analyze_dataset(dataset_path):
     plt.savefig(heatmap_path)
     plt.close()
 
-    # Histograms
+    # Create histograms for numeric columns
     numeric_columns = df.select_dtypes(include=['number']).columns
     histogram_paths = []
-    if len(numeric_columns) > 0:
-        for column in numeric_columns:
-            plt.figure(figsize=(10, 6))
-            sns.histplot(df[column], kde=True, bins=30)
-            plt.title(f'{column} Distribution')
-            plt.xlabel(column)
-            plt.ylabel('Frequency')
-            histogram_path = os.path.join(output_dir, f"{column}_distribution.png")
-            plt.savefig(histogram_path)
-            plt.close()
-            histogram_paths.append(histogram_path)
+    for column in numeric_columns:
+        plt.figure(figsize=(10, 6))
+        sns.histplot(df[column], kde=True, bins=30)
+        plt.title(f'{column} Distribution')
+        plt.xlabel(column)
+        plt.ylabel('Frequency')
+        histogram_path = os.path.join(output_dir, f"{column}_distribution.png")
+        plt.savefig(histogram_path)
+        plt.close()
+        histogram_paths.append(histogram_path)
 
-    # Correlation matrix
+    # Correlation matrix for numeric columns
     correlation_matrix = df[numeric_columns].corr()
     plt.figure(figsize=(10, 8))
     sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
@@ -84,20 +92,24 @@ def load_and_analyze_dataset(dataset_path):
     plt.savefig(correlation_matrix_path)
     plt.close()
 
-    # Outlier detection
+    # Outlier detection using IQR (Interquartile Range) method
     Q1 = df[numeric_columns].quantile(0.25)
     Q3 = df[numeric_columns].quantile(0.75)
     IQR = Q3 - Q1
     outliers = ((df[numeric_columns] < (Q1 - 1.5 * IQR)) | (df[numeric_columns] > (Q3 + 1.5 * IQR))).sum()
 
-    # Send to LLM and get insights
+    # Send analysis data to LLM for insights
     llm_response = send_to_llm(df, numeric_columns, missing_values, skewness, kurtosis, correlation_matrix, outliers)
 
-    # Create README file
+    # Create a README file with analysis summary and LLM response
     create_readme(output_dir, missing_values, skewness, kurtosis, correlation_matrix_path, histogram_paths, llm_response)
 
 def send_to_llm(df, numeric_columns, missing_values, skewness, kurtosis, correlation_matrix, outliers):
+    """
+    This function sends data to a language model (LLM) to generate insights based on the analysis.
+    """
     try:
+        # Create a structured prompt to send to the LLM
         prompt = f"""
         I have analyzed a dataset with the following characteristics:
         
@@ -114,8 +126,9 @@ def send_to_llm(df, numeric_columns, missing_values, skewness, kurtosis, correla
         4. **The implications of your findings:** What actions should be taken based on the insights?
         """
 
+        # Send the prompt to the API
         data = {
-            "model": "gpt-4o-mini",
+            "model": "gpt-4",  # Model to use (make sure it's valid)
             "messages": [
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": prompt}
@@ -128,8 +141,10 @@ def send_to_llm(df, numeric_columns, missing_values, skewness, kurtosis, correla
             "Content-Type": "application/json"
         }
 
+        # Make API request
         response = requests.post(API_URL, json=data, headers=headers)
 
+        # Check for successful response
         if response.status_code == 200:
             return response.json()['choices'][0]['message']['content'].strip()
         else:
@@ -138,8 +153,12 @@ def send_to_llm(df, numeric_columns, missing_values, skewness, kurtosis, correla
         return f"Error sending data to LLM: {e}"
 
 def create_readme(output_dir, missing_values, skewness, kurtosis, correlation_matrix_path, histogram_paths, llm_response):
+    """
+    This function generates a README file to document the analysis results and LLM insights.
+    """
     readme_path = os.path.join(output_dir, "README.md")
     with open(readme_path, "w") as f:
+        # Write dataset analysis overview to the README
         f.write("# Dataset Analysis Report\n\n")
         f.write("## Missing Values\n")
         f.write(missing_values.to_string() + "\n\n")
@@ -156,8 +175,12 @@ def create_readme(output_dir, missing_values, skewness, kurtosis, correlation_ma
     print(f"README file created at {readme_path}")
 
 def main():
-    # No user input for dataset path, it's predefined to be used directly
-    dataset_path = "your_dataset.csv"  # Change this to the actual dataset file path
+    """
+    Main function to execute the dataset analysis process.
+    Make sure the dataset path is correct before running.
+    """
+    # Define dataset path here (adjust to the actual location of your CSV file)
+    dataset_path = "your_dataset.csv"  # Replace with actual dataset file path
     load_and_analyze_dataset(dataset_path)
 
 if __name__ == "__main__":
