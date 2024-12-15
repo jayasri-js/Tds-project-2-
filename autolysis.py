@@ -177,22 +177,24 @@ def create_readme(output_dir, missing_values, skewness, kurtosis, correlation_ma
 def main():
     """
     Main function to execute the dataset analysis process.
-    Automatically handles dataset path for evaluation scripts.
+    Handles both command-line arguments and automated paths.
     """
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Analyze a dataset from a CSV file.")
     parser.add_argument(
-        "--dataset", type=str,
-        help="Path to the input CSV dataset. If not provided, uses an environment variable.")
+        "--dataset", type=str, default=None,
+        help="Path to the input CSV dataset. If not provided, the DATASET_PATH environment variable will be used."
+    )
     args = parser.parse_args()
 
-    # Handle dataset path for automated scripts
+    # Determine dataset path
     dataset_path = args.dataset or os.getenv("DATASET_PATH")
-    if not dataset_path or not os.path.exists(dataset_path):
-        raise FileNotFoundError("Dataset path is not provided or the file does not exist.")
+    if not dataset_path:
+        raise ValueError("No dataset path provided. Use --dataset argument or set DATASET_PATH environment variable.")
 
-    # Call the analysis function
+    # Call the analysis function with the resolved dataset path
     load_and_analyze_dataset(dataset_path)
+
 
 if __name__ == "__main__":
     main()
