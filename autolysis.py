@@ -12,6 +12,7 @@ import matplotlib
 matplotlib.use('Agg')  # Set non-GUI backend
 
 
+
 import os
 import requests
 import pandas as pd
@@ -155,9 +156,9 @@ def create_readme(output_dir, missing_values, skewness, kurtosis, correlation_ma
     print(f"README file created at {readme_path}")
 
 def main():
-    dataset_path = input("Enter the path to your CSV dataset: ")
+    # No user input for dataset path, it's predefined to be used directly
+    dataset_path = "your_dataset.csv"  # Change this to the actual dataset file path
     load_and_analyze_dataset(dataset_path)
 
 if __name__ == "__main__":
     main()
-
