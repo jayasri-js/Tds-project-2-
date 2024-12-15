@@ -4,7 +4,8 @@
 #   "matplotlib",
 #   "seaborn",
 #   "pandas",
-#   "numpy"
+#   "numpy",
+#   "requests"
 # ]
 # ///
 import matplotlib
@@ -12,11 +13,17 @@ matplotlib.use('Agg')  # Set non-GUI backend
 
 
 import os
+import requests
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import numpy as np
-import sys
+
+# Read API token from environment variable
+AIPROXY_TOKEN = os.getenv("AIPROXY_TOKEN")
+if not AIPROXY_TOKEN:
+    raise ValueError("AIPROXY_TOKEN environment variable is not set.")
+
+API_URL = "https://aiproxy.sanand.workers.dev/openai/v1/chat/completions"
 
 def load_and_analyze_dataset(dataset_path):
     encodings = ['utf-8', 'utf-16', 'ISO-8859-1']
@@ -39,7 +46,6 @@ def load_and_analyze_dataset(dataset_path):
         print("Failed to load the dataset with all attempted encodings.")
         return
 
-    # Basic dataset statistics
     summary = df.describe()
     missing_values = df.isnull().sum()
     skewness = df.select_dtypes(include=['number']).skew()
@@ -53,7 +59,7 @@ def load_and_analyze_dataset(dataset_path):
     plt.savefig(heatmap_path)
     plt.close()
 
-    # Histograms for numeric columns
+    # Histograms
     numeric_columns = df.select_dtypes(include=['number']).columns
     histogram_paths = []
     if len(numeric_columns) > 0:
@@ -83,43 +89,54 @@ def load_and_analyze_dataset(dataset_path):
     IQR = Q3 - Q1
     outliers = ((df[numeric_columns] < (Q1 - 1.5 * IQR)) | (df[numeric_columns] > (Q3 + 1.5 * IQR))).sum()
 
-    # Generate insights locally
-    insights = generate_local_insights(missing_values, skewness, kurtosis, correlation_matrix, outliers)
+    # Send to LLM and get insights
+    llm_response = send_to_llm(df, numeric_columns, missing_values, skewness, kurtosis, correlation_matrix, outliers)
 
     # Create README file
-    create_readme(output_dir, missing_values, skewness, kurtosis, correlation_matrix_path, histogram_paths, insights)
+    create_readme(output_dir, missing_values, skewness, kurtosis, correlation_matrix_path, histogram_paths, llm_response)
 
-def generate_local_insights(missing_values, skewness, kurtosis, correlation_matrix, outliers):
-    # Summarize findings
-    insights = []
-    insights.append("### Insights\n")
-    insights.append("1. **Missing Values:**\n")
-    insights.append(missing_values.to_string() + "\n")
-    insights.append("\n2. **Skewness:**\n")
-    insights.append(skewness.to_string() + "\n")
-    insights.append("\n3. **Kurtosis:**\n")
-    insights.append(kurtosis.to_string() + "\n")
-    insights.append("\n4. **Correlation Matrix:**\n")
-    insights.append(correlation_matrix.to_string() + "\n")
-    insights.append("\n5. **Outliers:**\n")
-    insights.append(outliers.to_string() + "\n")
+def send_to_llm(df, numeric_columns, missing_values, skewness, kurtosis, correlation_matrix, outliers):
+    try:
+        prompt = f"""
+        I have analyzed a dataset with the following characteristics:
+        
+        **Missing Values:** {missing_values}
+        **Skewness in Numeric Features:** {skewness}
+        **Kurtosis in Numeric Features:** {kurtosis}
+        **Correlation Matrix:** {correlation_matrix.to_string()}
+        **Outliers (IQR Method):** {outliers}
+        
+        Please answer the following:
+        1. **The data you received:** Briefly describe the dataset.
+        2. **The analysis you carried out:** Summarize the key steps.
+        3. **The insights you discovered:** Highlight the main findings.
+        4. **The implications of your findings:** What actions should be taken based on the insights?
+        """
 
-    # Add observations based on the analysis
-    insights.append("\n### Observations:\n")
-    if missing_values.sum() > 0:
-        insights.append("- The dataset contains missing values. Consider imputing or removing them.\n")
-    else:
-        insights.append("- No missing values detected.\n")
+        data = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": prompt}
+            ],
+            "max_tokens": 500
+        }
 
-    if skewness.abs().max() > 1:
-        insights.append("- Some numeric features exhibit high skewness. Consider transformations like log or square root.\n")
+        headers = {
+            "Authorization": f"Bearer {AIPROXY_TOKEN}",
+            "Content-Type": "application/json"
+        }
 
-    if kurtosis.abs().max() > 3:
-        insights.append("- Some features have extreme kurtosis, indicating heavy tails or outliers.\n")
+        response = requests.post(API_URL, json=data, headers=headers)
 
-    return "\n".join(insights)
+        if response.status_code == 200:
+            return response.json()['choices'][0]['message']['content'].strip()
+        else:
+            return f"Error: {response.status_code} - {response.text}"
+    except Exception as e:
+        return f"Error sending data to LLM: {e}"
 
-def create_readme(output_dir, missing_values, skewness, kurtosis, correlation_matrix_path, histogram_paths, insights):
+def create_readme(output_dir, missing_values, skewness, kurtosis, correlation_matrix_path, histogram_paths, llm_response):
     readme_path = os.path.join(output_dir, "README.md")
     with open(readme_path, "w") as f:
         f.write("# Dataset Analysis Report\n\n")
@@ -133,18 +150,14 @@ def create_readme(output_dir, missing_values, skewness, kurtosis, correlation_ma
         f.write(f"- [Missing Values Heatmap]({os.path.basename(correlation_matrix_path)})\n")
         for histogram_path in histogram_paths:
             f.write(f"- [{os.path.basename(histogram_path)}]({os.path.basename(histogram_path)})\n\n")
-        f.write("## Insights and Observations\n")
-        f.write(insights + "\n")
+        f.write("## LLM-Generated Insights\n")
+        f.write(llm_response + "\n")
     print(f"README file created at {readme_path}")
 
 def main():
-    # Get dataset path from command line argument
-    if len(sys.argv) != 2:
-        print("Usage: python autolysis.py <path_to_csv_dataset>")
-        sys.exit(1)
-
-    dataset_path = sys.argv[1]
+    dataset_path = input("Enter the path to your CSV dataset: ")
     load_and_analyze_dataset(dataset_path)
 
 if __name__ == "__main__":
     main()
+
