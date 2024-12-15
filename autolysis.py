@@ -9,9 +9,8 @@
 # ]
 # ///
 
-
-
 import os
+import argparse
 import requests
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -28,24 +27,18 @@ if not AIPROXY_TOKEN:
 
 API_URL = "https://aiproxy.sanand.workers.dev/openai/v1/chat/completions"
 
-# Directory to save output files (like plots and README)
-OUTPUT_DIR = "analysis_output"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-def load_and_analyze_dataset():
+# Load dataset and perform data analysis
+def load_and_analyze_dataset(dataset_path):
     """
-    This function dynamically prompts the user for a CSV file path, loads the dataset, 
-    performs basic analysis, and generates visualizations and a README report.
+    This function loads a dataset, performs basic analysis like detecting missing values,
+    skewness, kurtosis, and generates visualizations.
     """
-    # Prompt user for dataset path
-    dataset_path = input("Enter the path to your CSV file: ").strip()
-
-    if not os.path.exists(dataset_path):
-        print(f"Error: File '{dataset_path}' does not exist.")
-        return
-
     encodings = ['utf-8', 'utf-16', 'ISO-8859-1']  # Different encodings to try while loading dataset
     df = None  # Initialize DataFrame
+
+    # Directory to save output files (like plots)
+    output_dir = "analysis_output"
+    os.makedirs(output_dir, exist_ok=True)
 
     # Try loading the dataset with different encodings until it succeeds
     for encoding in encodings:
@@ -72,7 +65,7 @@ def load_and_analyze_dataset():
     plt.figure(figsize=(10, 6))
     sns.heatmap(df.isnull(), cbar=False, cmap='viridis')
     plt.title("Missing Values Heatmap")
-    heatmap_path = os.path.join(OUTPUT_DIR, "missing_values_heatmap.png")
+    heatmap_path = os.path.join(output_dir, "missing_values_heatmap.png")
     plt.savefig(heatmap_path)
     plt.close()
 
@@ -85,7 +78,7 @@ def load_and_analyze_dataset():
         plt.title(f'{column} Distribution')
         plt.xlabel(column)
         plt.ylabel('Frequency')
-        histogram_path = os.path.join(OUTPUT_DIR, f"{column}_distribution.png")
+        histogram_path = os.path.join(output_dir, f"{column}_distribution.png")
         plt.savefig(histogram_path)
         plt.close()
         histogram_paths.append(histogram_path)
@@ -95,7 +88,7 @@ def load_and_analyze_dataset():
     plt.figure(figsize=(10, 8))
     sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
     plt.title("Correlation Matrix")
-    correlation_matrix_path = os.path.join(OUTPUT_DIR, "correlation_matrix.png")
+    correlation_matrix_path = os.path.join(output_dir, "correlation_matrix.png")
     plt.savefig(correlation_matrix_path)
     plt.close()
 
@@ -109,7 +102,7 @@ def load_and_analyze_dataset():
     llm_response = send_to_llm(df, numeric_columns, missing_values, skewness, kurtosis, correlation_matrix, outliers)
 
     # Create a README file with analysis summary and LLM response
-    create_readme(missing_values, skewness, kurtosis, correlation_matrix_path, histogram_paths, llm_response)
+    create_readme(output_dir, missing_values, skewness, kurtosis, correlation_matrix_path, histogram_paths, llm_response)
 
 def send_to_llm(df, numeric_columns, missing_values, skewness, kurtosis, correlation_matrix, outliers):
     """
@@ -159,11 +152,11 @@ def send_to_llm(df, numeric_columns, missing_values, skewness, kurtosis, correla
     except Exception as e:
         return f"Error sending data to LLM: {e}"
 
-def create_readme(missing_values, skewness, kurtosis, correlation_matrix_path, histogram_paths, llm_response):
+def create_readme(output_dir, missing_values, skewness, kurtosis, correlation_matrix_path, histogram_paths, llm_response):
     """
     This function generates a README file to document the analysis results and LLM insights.
     """
-    readme_path = os.path.join(OUTPUT_DIR, "README.md")
+    readme_path = os.path.join(output_dir, "README.md")
     with open(readme_path, "w") as f:
         # Write dataset analysis overview to the README
         f.write("# Dataset Analysis Report\n\n")
@@ -184,8 +177,24 @@ def create_readme(missing_values, skewness, kurtosis, correlation_matrix_path, h
 def main():
     """
     Main function to execute the dataset analysis process.
+    Make sure the dataset path is passed as a command-line argument.
     """
-    load_and_analyze_dataset()
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description="Analyze a dataset from a CSV file.")
+    parser.add_argument(
+        "--dataset", type=str, required=True,
+        help="Path to the input CSV dataset."
+    )
+    args = parser.parse_args()
+
+    # Call the analysis function with the provided dataset
+    load_and_analyze_dataset(args.dataset)
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+ 
