@@ -104,9 +104,9 @@ def load_and_analyze_dataset(dataset_path):
     # Send analysis data to LLM for insights
    
     def send_to_llm(df, numeric_columns, missing_values, skewness, kurtosis, correlation_matrix, outliers):
-    """
-    This function sends data to GPT-4o-mini to generate precise and actionable insights based on the analysis.
-    """
+        """
+        This function sends data to GPT-4o-mini to generate precise and actionable insights based on the analysis.
+        """
     try:
         # Create a structured prompt with improved clarity and specificity
         prompt = f"""
